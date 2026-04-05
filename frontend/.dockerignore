@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+build
+.git
+.gitignore
+LICENSE
+README.md
+.env.local
+.vite
+dist

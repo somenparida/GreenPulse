@@ -48,6 +48,33 @@ vendor/
 *.tfstate
 *.tfstate.*
 *.tfvars
+
+# Node.js (Frontend)
+node_modules/
+npm-debug.log
+yarn-error.log
+.npm
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Database
+*.db
+*.sqlite3
+
+# IDE
+.vscodeignore
 !*.tfvars.example
 .terraform.lock.hcl
 crash.*.log
