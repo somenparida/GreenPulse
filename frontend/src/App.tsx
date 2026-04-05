@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 import './index.css'
 
 interface SensorReading {
@@ -11,10 +11,16 @@ interface SensorReading {
   timestamp: string
 }
 
+interface ApiError {
+  message: string
+  code?: string
+}
+
 function App() {
   const [readings, setReadings] = useState<SensorReading[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
     fetchReadings()
@@ -24,13 +30,36 @@ function App() {
 
   const fetchReadings = async () => {
     try {
-      const response = await axios.get('/api/v1/readings')
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await axios.get<SensorReading[]>(
+        `${apiUrl}/api/v1/readings?limit=100`
+      )
       setReadings(response.data)
       setLoading(false)
+      setError(null)
+      setRetryCount(0)
     } catch (err) {
-      setError('Failed to fetch sensor readings')
+      const errorMessage =
+        err instanceof AxiosError
+          ? err.response?.data?.message || err.message
+          : 'Failed to fetch sensor readings'
+      setError(errorMessage)
       setLoading(false)
+      setRetryCount((prev) => prev + 1)
     }
+  }
+(
+          <div className="error-container">
+            <div className="error">{error}</div>
+            <button onClick={handleRetry} className="retry-btn">
+              Retry (Attempt {retryCount + 1})
+            </button>
+          </div>
+        )
+  const handleRetry = () => {
+    setLoading(true)
+    setError(null)
+    fetchReadings()
   }
 
   return (
@@ -42,7 +71,14 @@ function App() {
 
       <main className="main">
         {loading && <div className="loading">Loading sensor data...</div>}
-        {error && <div className="error">{error}</div>}
+        {error && (
+          <div className="error-container">
+            <div className="error">{error}</div>
+            <button onClick={handleRetry} className="retry-btn">
+              Retry (Attempt {retryCount + 1})
+            </button>
+          </div>
+        )}
 
         <div className="readings-grid">
           {readings.length > 0 ? (
@@ -64,9 +100,9 @@ function App() {
                 <div className="timestamp">{new Date(reading.timestamp).toLocaleString()}</div>
               </div>
             ))
-          ) : (
+          ) : !loading ? (
             <p className="no-data">No sensor data available</p>
-          )}
+          ) : null}
         </div>
       </main>
 

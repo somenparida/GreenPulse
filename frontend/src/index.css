@@ -185,4 +185,12 @@ body {
   .main {
     padding: 1rem;
   }
+
+  .error-container {
+    margin: 1rem 0;
+  }
+
+  .retry-btn {
+    width: 100%;
+  }
 }
