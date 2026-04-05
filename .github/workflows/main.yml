@@ -1,0 +1,127 @@
+name: main
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python tooling
+        run: pip install ruff pytest requests streamlit pandas
+
+      - name: Ruff (sensor-emulator + dashboard)
+        run: ruff check apps/sensor-emulator apps/dashboard
+
+      - name: Pytest (sensor-emulator)
+        working-directory: apps/sensor-emulator
+        run: pytest tests -q
+
+      - name: Go unit tests (containerized)
+        run: |
+          docker run --rm -v "$PWD/apps/ingestion-api:/src" -w /src golang:1.22-alpine \
+            sh -c "go test ./..."
+
+  build-scan-push:
+    needs: lint-test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - context: ./apps/sensor-emulator
+            image: greenpulse-sensor-emulator
+          - context: ./apps/ingestion-api
+            image: greenpulse-ingestion-api
+          - context: ./apps/dashboard
+            image: greenpulse-dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set lowercase image owner
+        run: echo "IMAGE_OWNER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image (load for scan)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          load: true
+          tags: local/${{ matrix.image }}:${{ github.sha }}
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: "local/${{ matrix.image }}:${{ github.sha }}"
+          format: table
+          exit-code: "0"
+
+      - name: Push image
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.image }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.image }}:latest
+
+  deploy-k8s:
+    needs: build-scan-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set lowercase image owner
+        run: echo "IMAGE_OWNER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Configure kubeconfig from secret
+        id: kc
+        run: |
+          if [ -n "${{ secrets.KUBE_CONFIG_B64 }}" ]; then
+            echo "${{ secrets.KUBE_CONFIG_B64 }}" | base64 -d > "$RUNNER_TEMP/kubeconfig"
+            echo "has_kube=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_kube=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy with kubectl (kustomize)
+        if: steps.kc.outputs.has_kube == '1'
+        env:
+          KUBECONFIG: ${{ runner.temp }}/kubeconfig
+        run: |
+          kubectl apply -k infrastructure/kubernetes/base
+          kubectl set image deployment/ingestion-api ingestion-api="${REGISTRY}/${IMAGE_OWNER}/greenpulse-ingestion-api:${GITHUB_SHA}" -n greenpulse
+          kubectl set image deployment/sensor-emulator sensor-emulator="${REGISTRY}/${IMAGE_OWNER}/greenpulse-sensor-emulator:${GITHUB_SHA}" -n greenpulse
+          kubectl set image deployment/dashboard dashboard="${REGISTRY}/${IMAGE_OWNER}/greenpulse-dashboard:${GITHUB_SHA}" -n greenpulse
+          kubectl rollout status deployment/ingestion-api -n greenpulse --timeout=300s
+
+      - name: Skip cluster deploy
+        if: steps.kc.outputs.has_kube != '1'
+        run: echo "KUBE_CONFIG_B64 is not configured — skipping Kubernetes deploy."
