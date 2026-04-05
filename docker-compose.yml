@@ -1,0 +1,56 @@
+# Local development: copy .env.example to .env and set ${POSTGRES_USER}, ${POSTGRES_PASSWORD}, ${POSTGRES_DB}.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - gp_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ingestion-api:
+    build:
+      context: ./apps/ingestion-api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  sensor-emulator:
+    build:
+      context: ./apps/sensor-emulator
+      dockerfile: Dockerfile
+    environment:
+      INGEST_URL: http://ingestion-api:8080/api/v1/telemetry
+      EMULATOR_INTERVAL_SECONDS: ${EMULATOR_INTERVAL_SECONDS:-5}
+      PLOT_ID: ${PLOT_ID:-plot-local-01}
+    depends_on:
+      - ingestion-api
+
+  dashboard:
+    build:
+      context: ./apps/dashboard
+      dockerfile: Dockerfile
+    environment:
+      INGESTION_API_URL: http://ingestion-api:8080
+      DASHBOARD_REFRESH_SECONDS: ${DASHBOARD_REFRESH_SECONDS:-10}
+    ports:
+      - "8501:8501"
+    depends_on:
+      - ingestion-api
+
+volumes:
+  gp_pgdata:
