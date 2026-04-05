@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (gitignored) or use -var flags / TF_VAR_*.
+# Never commit real credentials.
+
+aws_region          = "${AWS_REGION}"
+environment         = "${ENVIRONMENT}"
+project_name        = "greenpulse"
+vpc_cidr            = "10.42.0.0/16"
+eks_version         = "1.29"
+rds_master_username = "${RDS_MASTER_USERNAME}"

@@ -1,0 +1,10 @@
+# Copy to backend.hcl (gitignored locally if you prefer) and replace placeholders.
+# Bootstrap: create S3 bucket + DynamoDB table for lock before first init.
+#
+#   terraform init -backend-config=backend.hcl
+
+bucket         = "REPLACE_ME_TF_STATE_BUCKET"
+key            = "REPLACE_ME_ENV/greenpulse/terraform.tfstate"
+region         = "REPLACE_ME_AWS_REGION"
+dynamodb_table = "REPLACE_ME_TF_LOCK_TABLE"
+encrypt        = true

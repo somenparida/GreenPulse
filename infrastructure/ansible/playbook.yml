@@ -1,0 +1,48 @@
+---
+# Simulates provisioning a local/VM "edge gateway" that could run sensor aggregation.
+# Run: ansible-playbook -i inventory.ini playbook.yml
+- name: Configure GreenPulse edge gateway simulation
+  hosts: edge_gateway
+  become: true
+  vars:
+    edge_app_dir: /opt/greenpulse-edge
+    docker_compose_version: "v2.29.7"
+  tasks:
+    - name: Ensure required packages (Debian/Ubuntu family)
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - python3
+          - python3-pip
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure edge application directory exists
+      ansible.builtin.file:
+        path: "{{ edge_app_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Place edge environment template (fill with real values on host)
+      ansible.builtin.copy:
+        dest: "{{ edge_app_dir }}/.env.example"
+        mode: "0644"
+        content: |
+          # Edge forwards aggregated telemetry to cloud ingestion endpoint
+          CLOUD_INGEST_URL=${CLOUD_INGEST_URL}
+          EDGE_DEVICE_ID=${EDGE_DEVICE_ID}
+
+    - name: Place stub edge forwarder script
+      ansible.builtin.copy:
+        dest: "{{ edge_app_dir }}/edge-forwarder.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env sh
+          set -euo pipefail
+          echo "GreenPulse edge gateway simulation — configure CLOUD_INGEST_URL in .env"
+
+    - name: Report completion
+      ansible.builtin.debug:
+        msg: "Edge gateway simulation staged under {{ edge_app_dir }}. Install Docker separately if you extend this playbook to run containers."

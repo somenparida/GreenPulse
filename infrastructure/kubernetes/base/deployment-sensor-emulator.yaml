@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sensor-emulator
+  namespace: greenpulse
+  labels:
+    app.kubernetes.io/name: sensor-emulator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sensor-emulator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sensor-emulator
+    spec:
+      containers:
+        - name: sensor-emulator
+          image: ghcr.io/PLACEHOLDER_ORG/greenpulse-sensor-emulator:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: INGEST_URL
+              value: "http://ingestion-api.greenpulse.svc.cluster.local:8080/api/v1/telemetry"
+            - name: EMULATOR_INTERVAL_SECONDS
+              value: "5"
+            - name: PLOT_ID
+              value: "plot-k8s-01"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import sys; sys.exit(0)"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "import urllib.request; urllib.request.urlopen('http://ingestion-api.greenpulse.svc.cluster.local:8080/health/live', timeout=5)"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
