@@ -48,14 +48,7 @@ function App() {
       setRetryCount((prev) => prev + 1)
     }
   }
-(
-          <div className="error-container">
-            <div className="error">{error}</div>
-            <button onClick={handleRetry} className="retry-btn">
-              Retry (Attempt {retryCount + 1})
-            </button>
-          </div>
-        )
+
   const handleRetry = () => {
     setLoading(true)
     setError(null)
