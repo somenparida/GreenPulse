@@ -103,9 +103,11 @@ jobs:
 
       - name: Configure kubeconfig from secret
         id: kc
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
         run: |
-          if [ -n "${{ secrets.KUBE_CONFIG_B64 }}" ]; then
-            echo "${{ secrets.KUBE_CONFIG_B64 }}" | base64 -d > "$RUNNER_TEMP/kubeconfig"
+          if [ -n "$KUBE_CONFIG_B64" ]; then
+            echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/kubeconfig"
             echo "has_kube=1" >> "$GITHUB_OUTPUT"
           else
             echo "has_kube=0" >> "$GITHUB_OUTPUT"
